@@ -73,11 +73,11 @@
 
     <!-- Loading Overlay -->
     <div id="loader-overlay" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-50">
-        <svg class="animate-spin h-10 w-10 text-red-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg id="loader-spinner" class="animate-spin h-10 w-10 text-red-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <p class="text-gray-300 font-medium">Loading your vocabulary...</p>
+        <p id="loader-text" class="text-gray-300 font-medium">Loading your vocabulary...</p>
     </div>
 
     <div id="app-container" class="w-full max-w-md mx-auto flex flex-col min-h-screen md:h-auto md:my-8 md:rounded-2xl md:shadow-2xl md:border md:border-red-900/50">
@@ -196,16 +196,19 @@
     </div>
 
     <script type="module">
-const firebaseConfig = {
-  apiKey: "AIzaSyAfgJVfevvBpGaemGJf9ajRm59tP8kM1XM",
-  authDomain: "french-flashcard-acb68.firebaseapp.com",
-  projectId: "french-flashcard-acb68",
-  storageBucket: "french-flashcard-acb68.firebasestorage.app",
-  messagingSenderId: "360159415670",
-  appId: "1:360159415670:web:be3dc34f9d4b4673063e57"
-};
+        // STEP 1: Paste your Firebase config object here, replacing this placeholder.
+        // Get this from your Firebase project settings.
+        const firebaseConfig = {
+          apiKey: "AIzaSyAfgJVfevvBpGaemGJf9ajRm59tP8kM1XM",
+          authDomain: "french-flashcard-acb68.firebaseapp.com",
+          projectId: "french-flashcard-acb68",
+          storageBucket: "french-flashcard-acb68.firebasestorage.app",
+          messagingSenderId: "360159415670",
+          appId: "1:360159415670:web:be3dc34f9d4b4673063e57"
+        };
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         const defaultVocabulary = [
@@ -232,6 +235,8 @@ const firebaseConfig = {
         // DOM Elements
         const appContainer = document.getElementById('app-container');
         const loaderOverlay = document.getElementById('loader-overlay');
+        const loaderSpinner = document.getElementById('loader-spinner');
+        const loaderText = document.getElementById('loader-text');
         const scoreEl = document.getElementById('score');
         const dailyScoreEl = document.getElementById('daily-score');
         const cardCounterEl = document.getElementById('card-counter');
@@ -281,6 +286,24 @@ const firebaseConfig = {
 
         // --- Firebase & Data ---
         async function initializeFirebase() {
+            // This check prevents the app from crashing if the Firebase config is not filled out.
+            if (firebaseConfig.apiKey.startsWith("PASTE_YOUR")) {
+                loaderSpinner.style.display = 'none';
+                loaderText.innerHTML = `
+                    <div class="text-center p-4 max-w-sm">
+                        <h2 class="text-xl font-bold text-red-500 mb-2">Configuration Needed</h2>
+                        <p class="text-gray-300">
+                            To use this app on GitHub, you must first create your own free Firebase project.
+                        </p>
+                        <p class="text-gray-400 text-sm mt-2">
+                            Open the <code>index.html</code> file, find the <code>firebaseConfig</code> object at the top of the script,
+                            and replace the placeholder values with your actual project credentials.
+                        </p>
+                    </div>
+                `;
+                return; // Stop the function from running further
+            }
+
             try {
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
@@ -289,7 +312,7 @@ const firebaseConfig = {
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
-                        const docPath = `/users/${userId}`;`
+                        const docPath = `/users/${userId}`;
                         userDocRef = doc(db, docPath);
                         setupUserListener();
                     } else {
@@ -298,7 +321,8 @@ const firebaseConfig = {
                 });
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
-                loaderOverlay.innerHTML = `<p class="text-red-500">Could not connect to database.</p>`;
+                loaderSpinner.style.display = 'none';
+                loaderText.innerHTML = `<p class="text-red-500">Could not connect to database. Please check your Firebase credentials.</p>`;
             }
         }
 
@@ -329,7 +353,8 @@ const firebaseConfig = {
 
             }, (error) => {
                 console.error("Error listening to user data changes:", error);
-                loaderOverlay.innerHTML = `<p class="text-red-500">Error loading your data.</p>`;
+                loaderSpinner.style.display = 'none';
+                loaderText.innerHTML = `<p class="text-red-500">Error loading your data.</p>`;
             });
         }
 
