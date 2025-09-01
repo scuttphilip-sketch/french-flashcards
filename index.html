@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>French Flashcard Game</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#450a0a">
+    <link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;French Flashcards&quot;,&quot;short_name&quot;:&quot;Flashcards&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#111827&quot;,&quot;theme_color&quot;:&quot;#991b1b&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23991b1b'/%3E%3Ctext x='50' y='55' font-size='50' fill='white' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;},{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23991b1b'/%3E%3Ctext x='50' y='55' font-size='50' fill='white' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <style>
+        html {
+            font-family: 'Lora', serif;
+        }
+        body {
+            background: linear-gradient(to bottom, #0055A4, #FFFFFF, #EF4135);
+            background-attachment: fixed;
+        }
+        #app-container {
+            background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)), url('https://images.unsplash.com/photo-1522093007474-d86e9bf7ba6f?q=80&w=1974&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+        }
+        .font-serif {
+             font-family: 'Playfair Display', serif;
+        }
+        .card-flip {
+            transform-style: preserve-3d;
+            transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        .card-flip.is-flipped {
+            transform: rotateY(180deg);
+        }
+        .card-face {
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3), 0 6px 6px rgba(0,0,0,0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .card-back {
+            transform: rotateY(180deg);
+        }
+        /* Spinner for loading state */
+        #loader-overlay {
+            transition: opacity 0.3s ease-in-out;
+        }
+        /* Custom select styling for dark mode */
+        .custom-select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%23d1d5db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1.25em;
+            padding-right: 2rem;
+        }
+    </style>
+</head>
+<body class="">
+
+    <!-- Loading Overlay -->
+    <div id="loader-overlay" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-50">
+        <svg class="animate-spin h-10 w-10 text-red-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-gray-300 font-medium">Loading your vocabulary...</p>
+    </div>
+
+    <div id="app-container" class="w-full max-w-md mx-auto flex flex-col min-h-screen md:h-auto md:my-8 md:rounded-2xl md:shadow-2xl md:border md:border-red-900/50">
+        <!-- Main Game View -->
+        <div id="game-view" class="flex-1 flex flex-col text-center p-4 sm:p-6">
+            <!-- Header section -->
+            <div class="flex-shrink-0">
+                <h1 class="font-serif text-4xl font-bold text-blue-400 mb-2">Carte-éclair</h1>
+                <p class="text-white mb-4 italic">French Flashcards</p>
+                <div class="flex justify-around items-center mb-4 text-center">
+                    <div>
+                        <p class="text-sm text-red-500">Score</p>
+                        <p id="score" class="text-2xl font-bold text-blue-400">0</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-red-500">Today's Best</p>
+                        <p id="daily-score" class="text-2xl font-bold text-white">0</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-red-500">Cards</p>
+                        <p id="card-counter" class="text-2xl font-bold text-red-500">0 / 0</p>
+                    </div>
+                </div>
+                 <div class="grid grid-cols-3 gap-2 items-center mb-6 px-2">
+                     <button id="manage-words-btn" class="px-3 py-2 bg-gray-700/50 border border-gray-600/80 text-gray-300 font-semibold rounded-lg hover:bg-gray-700 transition-colors text-sm truncate shadow-md">Manage</button>
+                    <select id="category-filter" class="custom-select w-full bg-gray-700/50 border border-gray-600/80 text-gray-300 font-semibold rounded-lg hover:bg-gray-700 transition-colors text-sm text-center px-3 py-2 focus:ring-2 focus:ring-red-500">
+                        <option value="all">All</option>
+                    </select>
+                    <button id="switch-mode-btn" class="px-3 py-2 bg-gray-700/50 border border-gray-600/80 text-gray-300 font-semibold rounded-lg hover:bg-gray-700 transition-colors text-sm truncate shadow-md">
+                        Fr &rarr; En
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Main content (stretches) -->
+            <div class="flex-grow flex flex-col justify-start items-center pt-4">
+                <div id="flashcard-container" class="relative w-full flex-shrink-0 h-28 sm:h-40 perspective-1000">
+                    <div id="flashcard" class="relative w-full h-full card-flip">
+                        <div class="card-face flex items-center justify-center bg-gradient-to-br from-red-600 via-red-800 to-black rounded-xl text-white p-4 text-center">
+                            <h2 id="prompt-word" class="text-3xl sm:text-4xl font-semibold"></h2>
+                        </div>
+                         <div class="card-face card-back flex flex-col items-center justify-center bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-800 rounded-xl text-white p-4 text-center">
+                            <h2 id="answer-word" class="text-2xl sm:text-3xl font-semibold"></h2>
+                        </div>
+                    </div>
+                </div>
+                <div id="feedback" class="mt-4 h-20 text-base sm:text-lg font-medium flex-shrink-0 flex items-center justify-center"></div>
+            </div>
+
+            <!-- Footer section (fixed at bottom) -->
+            <div class="flex-shrink-0 mt-2 min-h-32 flex flex-col justify-end">
+                <div id="input-section">
+                    <input type="text" id="answer-input" placeholder="Type the translation..." autocomplete="off" class="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-lg text-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition shadow-inner">
+                    <button id="submit-btn" class="w-full mt-4 bg-red-700 border border-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all duration-200 ease-in-out transform hover:scale-105 shadow-lg">
+                        Check Answer
+                    </button>
+                </div>
+                
+                <div id="next-section" class="hidden">
+                     <button id="next-btn" class="w-full bg-gray-600 border border-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-500 transition-all shadow-lg">Next Word</button>
+                </div>
+                 <div id="restart-section" class="hidden">
+                     <button id="restart-btn" class="w-full bg-amber-500 border border-amber-400 text-gray-900 font-bold py-3 rounded-lg hover:bg-amber-600 transition-all shadow-lg">Restart Game</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manage Words View -->
+        <div id="manage-view" class="hidden flex-1 flex flex-col overflow-hidden p-4 sm:p-6">
+             <div class="flex-shrink-0">
+                <h2 class="font-serif text-3xl font-bold text-red-500 mb-4 text-center">Manage Vocabulary</h2>
+                 <form id="add-word-form" class="space-y-3 mb-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="new-english-word" class="block text-sm font-medium text-gray-300 text-left mb-1">English</label>
+                            <div class="relative">
+                                <input type="text" id="new-english-word" placeholder="e.g., House" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition" required>
+                                <button type="button" id="translate-btn" class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-red-500" aria-label="Translate to French">
+                                    <svg id="translate-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-languages"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+                                    <svg id="spinner-icon" class="hidden animate-spin h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="new-french-word" class="block text-sm font-medium text-gray-300 text-left mb-1">French</label>
+                            <input type="text" id="new-french-word" placeholder="Translate..." class="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition" required>
+                        </div>
+                    </div>
+                     <div>
+                        <div class="flex justify-between items-center mb-1">
+                             <label for="new-word-category" class="block text-sm font-medium text-gray-300 text-left">Category</label>
+                             <button type="button" id="add-category-btn" class="text-sm text-red-500 hover:text-red-400 font-semibold">+ New Category</button>
+                        </div>
+                        <select id="new-word-category" class="custom-select w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"></select>
+                    </div>
+                    <div id="new-category-form" class="hidden space-y-2 pt-2">
+                        <input type="text" id="new-category-name" placeholder="New category name..." class="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg">
+                        <div class="flex gap-2">
+                            <button type="button" id="save-category-btn" class="w-full bg-red-600 border border-red-500 text-white font-bold py-2 rounded-lg hover:bg-red-700 transition-colors">Save</button>
+                            <button type="button" id="cancel-category-btn" class="w-full bg-gray-600 border border-gray-500 text-gray-200 font-bold py-2 rounded-lg hover:bg-gray-500 transition-colors">Cancel</button>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full !mt-4 bg-red-700 border border-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-colors shadow-lg">Add to Vocabulary</button>
+                 </form>
+             </div>
+             <div id="word-list-container" class="flex-1 overflow-y-auto min-h-0 border-t border-b border-gray-700 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2">
+                <ul id="word-list" class="space-y-2"></ul>
+             </div>
+             <div class="flex-shrink-0 mt-4">
+                <button id="back-to-game-btn" class="w-full bg-gray-600 border border-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-500 transition-all shadow-lg">Back to Game</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+const firebaseConfig = {
+  apiKey: "AIzaSyAfgJVfevvBpGaemGJf9ajRm59tP8kM1XM",
+  authDomain: "french-flashcard-acb68.firebaseapp.com",
+  projectId: "french-flashcard-acb68",
+  storageBucket: "french-flashcard-acb68.firebasestorage.app",
+  messagingSenderId: "360159415670",
+  appId: "1:360159415670:web:be3dc34f9d4b4673063e57"
+};
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        const defaultVocabulary = [
+            { french: 'Bonjour', english: 'Hello', category: 'word' },
+            { french: 'Merci', english: 'Thank you', category: 'word' },
+            { french: 'Chat', english: 'Cat', category: 'word' },
+            { french: 'Maison', english: 'House', category: 'word' },
+            { french: 'Comment ça va ?', english: 'How are you?', category: 'phrase' },
+        ];
+        
+        // Game State
+        let vocabulary = [];
+        let userCategories = ['word', 'phrase'];
+        let currentWordIndex = 0;
+        let score = 0;
+        let dailyBestScore = 0;
+        let shuffledVocabulary = [];
+        let gameMode = 'frenchToEnglish'; // 'frenchToEnglish' or 'englishToFrench'
+        let isInitialLoad = true;
+
+        // Firebase variables
+        let app, db, auth, userId, userDocRef;
+
+        // DOM Elements
+        const appContainer = document.getElementById('app-container');
+        const loaderOverlay = document.getElementById('loader-overlay');
+        const scoreEl = document.getElementById('score');
+        const dailyScoreEl = document.getElementById('daily-score');
+        const cardCounterEl = document.getElementById('card-counter');
+        const promptWordEl = document.getElementById('prompt-word');
+        const answerWordEl = document.getElementById('answer-word');
+        const answerInput = document.getElementById('answer-input');
+        const feedbackEl = document.getElementById('feedback');
+        const submitBtn = document.getElementById('submit-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const flashcard = document.getElementById('flashcard');
+        const flashcardContainer = document.getElementById('flashcard-container');
+        const inputSection = document.getElementById('input-section');
+        const nextSection = document.getElementById('next-section');
+        const restartSection = document.getElementById('restart-section');
+        const switchModeBtn = document.getElementById('switch-mode-btn');
+        const categoryFilter = document.getElementById('category-filter');
+        // Views
+        const gameView = document.getElementById('game-view');
+        const manageView = document.getElementById('manage-view');
+        // Manage Words Elements
+        const manageWordsBtn = document.getElementById('manage-words-btn');
+        const backToGameBtn = document.getElementById('back-to-game-btn');
+        const addWordForm = document.getElementById('add-word-form');
+        const newFrenchWordInput = document.getElementById('new-french-word');
+        const newEnglishWordInput = document.getElementById('new-english-word');
+        const newWordCategory = document.getElementById('new-word-category');
+        const wordList = document.getElementById('word-list');
+        const translateBtn = document.getElementById('translate-btn');
+        const translateIcon = document.getElementById('translate-icon');
+        const spinnerIcon = document.getElementById('spinner-icon');
+        // Custom Category Elements
+        const addCategoryBtn = document.getElementById('add-category-btn');
+        const newCategoryForm = document.getElementById('new-category-form');
+        const newCategoryNameInput = document.getElementById('new-category-name');
+        const saveCategoryBtn = document.getElementById('save-category-btn');
+        const cancelCategoryBtn = document.getElementById('cancel-category-btn');
+        
+        // --- Date Helper ---
+        function getTodayDateString() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // --- Firebase & Data ---
+        async function initializeFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        const docPath = `/users/${userId}`;`
+                        userDocRef = doc(db, docPath);
+                        setupUserListener();
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                loaderOverlay.innerHTML = `<p class="text-red-500">Could not connect to database.</p>`;
+            }
+        }
+
+        function setupUserListener() {
+            onSnapshot(userDocRef, (doc) => {
+                const today = getTodayDateString();
+                if (doc.exists()) {
+                    const data = doc.data();
+                    vocabulary = (data.vocabulary || []).map(word => ({ ...word, category: word.category || 'word' }));
+                    userCategories = [...new Set(['word', 'phrase', ...(data.categories || [])])];
+                    const dailyScores = data.dailyScores || {};
+                    dailyBestScore = dailyScores[today] || 0;
+                } else {
+                    vocabulary = [...defaultVocabulary];
+                    userCategories = ['word', 'phrase'];
+                    dailyBestScore = 0;
+                    saveUserData(); // Create the initial document
+                }
+                
+                populateCategoryDropdowns();
+                dailyScoreEl.textContent = dailyBestScore;
+                
+                if (isInitialLoad) {
+                    startGame();
+                    hideLoader();
+                    isInitialLoad = false;
+                }
+
+            }, (error) => {
+                console.error("Error listening to user data changes:", error);
+                loaderOverlay.innerHTML = `<p class="text-red-500">Error loading your data.</p>`;
+            });
+        }
+
+        async function saveUserData() {
+            if (!userDocRef) return;
+            try {
+                const today = getTodayDateString();
+                const payload = {
+                    vocabulary: vocabulary,
+                    categories: userCategories,
+                    dailyScores: { [today]: dailyBestScore }
+                };
+                await setDoc(userDocRef, payload, { merge: true });
+            } catch (error) { console.error("Error saving user data:", error); }
+        }
+        
+        async function updateVocabulary() {
+            if (!userDocRef) return;
+            try {
+                await updateDoc(userDocRef, { vocabulary: vocabulary });
+            } catch (error) { console.error("Error updating vocabulary:", error); }
+        }
+
+        async function updateCategories() {
+            if (!userDocRef) return;
+            try {
+                await updateDoc(userDocRef, { categories: userCategories });
+            } catch (error) { console.error("Error updating categories:", error); }
+        }
+        
+        async function updateDailyScore() {
+            if (!userDocRef) return;
+            try {
+                const today = getTodayDateString();
+                await updateDoc(userDocRef, { [`dailyScores.${today}`]: dailyBestScore });
+            } catch (error) { console.error("Error updating daily score:", error); }
+        }
+
+        // --- UI ---
+        function hideLoader() {
+            loaderOverlay.style.opacity = '0';
+            setTimeout(() => { loaderOverlay.classList.add('hidden'); }, 300);
+        }
+
+        function populateCategoryDropdowns() {
+            const currentAddCat = newWordCategory.value;
+            const currentFilterCat = categoryFilter.value;
+
+            // Populate Add Word dropdown
+            newWordCategory.innerHTML = '';
+            userCategories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+                newWordCategory.appendChild(option);
+            });
+            newWordCategory.value = currentAddCat && userCategories.includes(currentAddCat) ? currentAddCat : 'word';
+
+            // Populate Filter dropdown
+            categoryFilter.innerHTML = '<option value="all">All</option>';
+            userCategories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+                categoryFilter.appendChild(option);
+            });
+            categoryFilter.value = currentFilterCat && (userCategories.includes(currentFilterCat) || currentFilterCat === 'all') ? currentFilterCat : 'all';
+        }
+
+        // --- Translation ---
+        async function handleTranslate() {
+            const englishWord = newEnglishWordInput.value.trim();
+            if (!englishWord) { newFrenchWordInput.value = ''; return; }
+            translateIcon.classList.add('hidden');
+            spinnerIcon.classList.remove('hidden');
+            translateBtn.disabled = true;
+            newFrenchWordInput.value = 'Translating...';
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const prompt = `Translate "${englishWord}" into French. Only provide the translated word or phrase, with no additional explanation or context.`;
+            const payload = { contents: [{ parts: [{ text: prompt }] }] };
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+                if (candidate?.content?.parts?.[0]?.text) {
+                    newFrenchWordInput.value = candidate.content.parts[0].text.trim().replace(/^["']|["']$/g, '');
+                } else { newFrenchWordInput.value = 'Could not translate.'; }
+            } catch (error) {
+                console.error('Translation error:', error);
+                newFrenchWordInput.value = 'Translation failed.';
+            } finally {
+                translateIcon.classList.remove('hidden');
+                spinnerIcon.classList.add('hidden');
+                translateBtn.disabled = false;
+            }
+        }
+
+        // --- Vocabulary Management ---
+        function renderWordList() {
+            wordList.innerHTML = '';
+            if (vocabulary.length === 0) {
+                wordList.innerHTML = `<li class="text-gray-400 text-center p-4">Your vocabulary is empty.</li>`;
+                return;
+            }
+            [...vocabulary].reverse().forEach((word) => {
+                const li = document.createElement('li');
+                const wordIndex = vocabulary.indexOf(word);
+                li.className = 'flex items-center justify-between p-3 bg-gray-700/50 rounded-lg';
+                const categoryDisplay = (word.category || 'word').charAt(0).toUpperCase() + (word.category || 'word').slice(1);
+                li.innerHTML = `
+                    <div class="flex-grow text-left">
+                        <p class="font-medium text-gray-200">${word.french}</p>
+                        <p class="text-sm text-gray-400">${word.english}</p>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="text-xs bg-red-900/70 text-red-300 font-semibold rounded-full px-2.5 py-1 mr-4">${categoryDisplay}</span>
+                        <button data-index="${wordIndex}" class="delete-word-btn text-gray-500 hover:text-red-500 font-bold p-1 rounded-full hover:bg-red-900/50 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>`;
+                wordList.appendChild(li);
+            });
+        }
+
+        async function addWord(e) {
+            e.preventDefault();
+            const french = newFrenchWordInput.value.trim();
+            const english = newEnglishWordInput.value.trim();
+            const category = newWordCategory.value;
+            if (french && english) {
+                vocabulary.push({ french, english, category });
+                renderWordList();
+                await updateVocabulary();
+                newFrenchWordInput.value = '';
+                newEnglishWordInput.value = '';
+                newEnglishWordInput.focus();
+            }
+        }
+
+        async function deleteWord(index) {
+            vocabulary.splice(index, 1);
+            renderWordList();
+            await updateVocabulary();
+        }
+
+        // --- Game Logic ---
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function startGame() {
+            currentWordIndex = 0; score = 0;
+            const selectedCategory = categoryFilter.value;
+            let filteredVocab = (selectedCategory === 'all') ? vocabulary : vocabulary.filter(w => w.category === selectedCategory);
+            shuffledVocabulary = shuffle([...filteredVocab]);
+            scoreEl.textContent = score;
+            dailyScoreEl.textContent = dailyBestScore;
+            inputSection.classList.remove('hidden');
+            nextSection.classList.add('hidden');
+            restartSection.classList.add('hidden');
+            feedbackEl.textContent = '';
+            flashcard.classList.remove('is-flipped');
+            loadNextWord();
+        }
+
+        function loadNextWord() {
+             if (shuffledVocabulary.length === 0) {
+                promptWordEl.textContent = 'No Words'; answerWordEl.textContent = 'No Words';
+                const selectedCategory = categoryFilter.value;
+                if(selectedCategory !== 'all' && vocabulary.length > 0) {
+                    feedbackEl.innerHTML = `<i>No items in "${selectedCategory}" category.</i>`;
+                } else {
+                    feedbackEl.innerHTML = `<i>Add words in "Manage" to play!</i>`;
+                }
+                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium flex-shrink-0 flex items-center justify-center text-gray-400';
+                inputSection.classList.add('hidden');
+                cardCounterEl.textContent = `0 / 0`;
+                return;
+            }
+            if (currentWordIndex < shuffledVocabulary.length) {
+                const wordPair = shuffledVocabulary[currentWordIndex];
+                flashcard.classList.remove('is-flipped');
+                setTimeout(() => {
+                    if (gameMode === 'frenchToEnglish') {
+                        promptWordEl.textContent = wordPair.french;
+                        answerWordEl.textContent = wordPair.english;
+                        answerInput.placeholder = "Type the English translation...";
+                    } else {
+                        promptWordEl.textContent = wordPair.english;
+                        answerWordEl.textContent = wordPair.french;
+                        answerInput.placeholder = "Type the French translation...";
+                    }
+                }, 300);
+                cardCounterEl.textContent = `${currentWordIndex + 1} / ${shuffledVocabulary.length}`;
+                answerInput.value = ''; feedbackEl.textContent = '';
+                inputSection.classList.remove('hidden'); nextSection.classList.add('hidden');
+                answerInput.disabled = false;
+                setTimeout(() => answerInput.focus(), 0);
+            } else { endGame(); }
+        }
+
+        function checkAnswer() {
+            if (shuffledVocabulary.length === 0) return;
+            const userAnswer = answerInput.value.trim().toLowerCase();
+            const currentWord = shuffledVocabulary[currentWordIndex];
+            const correctAnswer = (gameMode === 'frenchToEnglish' ? currentWord.english : currentWord.french).toLowerCase();
+            const feedbackAnswer = gameMode === 'frenchToEnglish' ? currentWord.english : currentWord.french;
+            answerInput.disabled = true;
+            if (userAnswer === correctAnswer) {
+                score++;
+                scoreEl.textContent = score;
+                feedbackEl.innerHTML = '<i>Correct!</i>';
+                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-amber-400 flex-shrink-0 flex items-center justify-center';
+                flashcard.classList.add('is-flipped');
+            } else {
+                feedbackEl.innerHTML = `<i>Not quite. The answer is: <span class="font-bold">${feedbackAnswer}</span></i>`;
+                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-red-500 flex-shrink-0 flex items-center justify-center';
+            }
+            inputSection.classList.add('hidden');
+            nextSection.classList.remove('hidden');
+        }
+
+        async function endGame() {
+            if (score > dailyBestScore) {
+                dailyBestScore = score;
+                dailyScoreEl.textContent = dailyBestScore;
+                await updateDailyScore();
+            }
+            promptWordEl.textContent = 'Félicitations!';
+            feedbackEl.innerHTML = `<i>You finished! Final score: ${score} / ${shuffledVocabulary.length}</i>`;
+            feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-gray-300 flex-shrink-0 flex items-center justify-center';
+            inputSection.classList.add('hidden');
+            nextSection.classList.add('hidden');
+            restartSection.classList.remove('hidden');
+        }
+        
+        // --- Event Listeners ---
+        switchModeBtn.addEventListener('click', () => {
+            gameMode = gameMode === 'frenchToEnglish' ? 'englishToFrench' : 'frenchToEnglish';
+            switchModeBtn.innerHTML = gameMode === 'frenchToEnglish' ? 'Fr &rarr; En' : 'En &rarr; Fr';
+            startGame();
+        });
+        categoryFilter.addEventListener('change', startGame);
+        manageWordsBtn.addEventListener('click', () => {
+            gameView.classList.add('hidden');
+            manageView.classList.remove('hidden');
+            renderWordList();
+        });
+        backToGameBtn.addEventListener('click', () => {
+            gameView.classList.remove('hidden');
+            manageView.classList.add('hidden');
+            startGame();
+        });
+        addWordForm.addEventListener('submit', addWord);
+        wordList.addEventListener('click', (e) => {
+            const deleteButton = e.target.closest('.delete-word-btn');
+            if (deleteButton) {
+                const index = deleteButton.getAttribute('data-index');
+                deleteWord(index);
+            }
+        });
+        submitBtn.addEventListener('click', checkAnswer);
+        answerInput.addEventListener('keypress', (e) => e.key === 'Enter' && !submitBtn.disabled && checkAnswer());
+        nextBtn.addEventListener('click', () => { currentWordIndex++; loadNextWord(); });
+        restartBtn.addEventListener('click', startGame);
+        translateBtn.addEventListener('click', handleTranslate);
+        newEnglishWordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleTranslate(); } });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                if (!nextSection.classList.contains('hidden')) { e.preventDefault(); nextBtn.click(); }
+                else if (!restartSection.classList.contains('hidden')) { e.preventDefault(); restartBtn.click(); }
+            }
+        });
+
+        answerInput.addEventListener('focus', () => {
+            // This is the key fix for mobile keyboard issues.
+            // When the user taps the input, wait for the keyboard to animate in,
+            // then scroll the flashcard into view.
+            setTimeout(() => {
+                flashcardContainer.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }, 300); // 300ms delay to allow keyboard to appear
+        });
+
+        // Custom Category Listeners
+        addCategoryBtn.addEventListener('click', () => {
+            newCategoryForm.classList.remove('hidden');
+            addCategoryBtn.classList.add('hidden');
+            newCategoryNameInput.focus();
+        });
+        cancelCategoryBtn.addEventListener('click', () => {
+            newCategoryForm.classList.add('hidden');
+            addCategoryBtn.classList.remove('hidden');
+        });
+        saveCategoryBtn.addEventListener('click', async () => {
+            const newCat = newCategoryNameInput.value.trim().toLowerCase();
+            if (newCat && !userCategories.includes(newCat)) {
+                userCategories.push(newCat);
+                await updateCategories();
+                populateCategoryDropdowns();
+                newWordCategory.value = newCat;
+            }
+            newCategoryNameInput.value = '';
+            newCategoryForm.classList.add('hidden');
+            addCategoryBtn.classList.remove('hidden');
+        });
+
+        // --- Initial Load ---
+        initializeFirebase();
+
+    </script>
+</body>
+</html>
+
