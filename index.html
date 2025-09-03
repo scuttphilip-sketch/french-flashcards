@@ -71,13 +71,37 @@
 </head>
 <body class="">
 
+    <!-- Configuration Overlay -->
+    <div id="config-overlay" class="hidden fixed inset-0 bg-gray-900/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 p-4">
+        <div class="w-full max-w-lg bg-gray-800 border border-red-900/50 rounded-2xl shadow-2xl p-6 text-center">
+            <h2 class="font-serif text-3xl font-bold text-red-500 mb-4">One-Time Setup</h2>
+            <p class="text-gray-300 mb-6">To connect to your private database, please paste your configuration keys below. You only need to do this once.</p>
+            
+            <div class="space-y-4 text-left">
+                <div>
+                    <label for="firebase-config-input" class="block text-sm font-medium text-gray-300 mb-1">1. Firebase Config Key</label>
+                    <textarea id="firebase-config-input" rows="5" class="w-full p-2 bg-gray-900 border border-gray-600 text-gray-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-red-500" placeholder="Paste the entire 'const firebaseConfig = { ... };' block here."></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Find this in your Firebase Project Settings under "SDK setup and configuration".</p>
+                </div>
+                <div>
+                    <label for="gemini-api-key-input" class="block text-sm font-medium text-gray-300 mb-1">2. Gemini API Key (for Translation)</label>
+                    <input type="text" id="gemini-api-key-input" class="w-full p-2 bg-gray-900 border border-gray-600 text-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-red-500" placeholder="Paste your Gemini API key here.">
+                    <p class="text-xs text-gray-500 mt-1">Find this in your Google AI Studio dashboard under "Get API key".</p>
+                </div>
+            </div>
+
+            <button id="save-config-btn" class="w-full mt-8 bg-red-700 border border-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-800 transition-all shadow-lg">Save and Start App</button>
+            <p id="config-error" class="text-red-500 text-sm mt-4 h-4"></p>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loader-overlay" class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center z-50">
         <svg id="loader-spinner" class="animate-spin h-10 w-10 text-red-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        <p id="loader-text" class="text-gray-300 font-medium">Loading your vocabulary...</p>
+        <p id="loader-text" class="text-gray-300 font-medium">Loading...</p>
     </div>
 
     <div id="app-container" class="w-full max-w-md mx-auto flex flex-col min-h-screen md:h-auto md:my-8 md:rounded-2xl md:shadow-2xl md:border md:border-red-900/50">
@@ -196,44 +220,22 @@
     </div>
 
     <script type="module">
-        // STEP 1: Paste your Firebase config object here, replacing this placeholder.
-        // Get this from your Firebase project settings.
-        const firebaseConfig = {
-          apiKey: "AIzaSyAfgJVfevvBpGaemGJf9ajRm59tP8kM1XM",
-  	  authDomain: "french-flashcard-acb68.firebaseapp.com",
-  	  projectId: "french-flashcard-acb68",
-  	  storageBucket: "french-flashcard-acb68.firebasestorage.app",
-  	  messagingSenderId: "360159415670",
-  	  appId: "1:360159415670:web:be3dc34f9d4b4673063e57"
-};
-      };
-
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        const defaultVocabulary = [
-            { french: 'Bonjour', english: 'Hello', category: 'word' },
-            { french: 'Merci', english: 'Thank you', category: 'word' },
-            { french: 'Chat', english: 'Cat', category: 'word' },
-            { french: 'Maison', english: 'House', category: 'word' },
-            { french: 'Comment ça va ?', english: 'How are you?', category: 'phrase' },
-        ];
-        
-        // Game State
-        let vocabulary = [];
-        let userCategories = ['word', 'phrase'];
-        let currentWordIndex = 0;
-        let score = 0;
-        let dailyBestScore = 0;
-        let shuffledVocabulary = [];
-        let gameMode = 'frenchToEnglish'; // 'frenchToEnglish' or 'englishToFrench'
-        let isInitialLoad = true;
+        // --- DOM Elements ---
+        const configOverlay = document.getElementById('config-overlay');
+        const firebaseConfigInput = document.getElementById('firebase-config-input');
+        const geminiApiKeyInput = document.getElementById('gemini-api-key-input');
+        const saveConfigBtn = document.getElementById('save-config-btn');
+        const configError = document.getElementById('config-error');
 
-        // Firebase variables
+        const defaultVocabulary = [ { french: 'Bonjour', english: 'Hello', category: 'word' } ];
+        
+        let vocabulary = [], userCategories = ['word', 'phrase'], currentWordIndex = 0, score = 0, dailyBestScore = 0, shuffledVocabulary = [], gameMode = 'frenchToEnglish', isInitialLoad = true;
         let app, db, auth, userId, userDocRef;
 
-        // DOM Elements
         const appContainer = document.getElementById('app-container');
         const loaderOverlay = document.getElementById('loader-overlay');
         const loaderSpinner = document.getElementById('loader-spinner');
@@ -255,10 +257,8 @@
         const restartSection = document.getElementById('restart-section');
         const switchModeBtn = document.getElementById('switch-mode-btn');
         const categoryFilter = document.getElementById('category-filter');
-        // Views
         const gameView = document.getElementById('game-view');
         const manageView = document.getElementById('manage-view');
-        // Manage Words Elements
         const manageWordsBtn = document.getElementById('manage-words-btn');
         const backToGameBtn = document.getElementById('back-to-game-btn');
         const addWordForm = document.getElementById('add-word-form');
@@ -269,14 +269,12 @@
         const translateBtn = document.getElementById('translate-btn');
         const translateIcon = document.getElementById('translate-icon');
         const spinnerIcon = document.getElementById('spinner-icon');
-        // Custom Category Elements
         const addCategoryBtn = document.getElementById('add-category-btn');
         const newCategoryForm = document.getElementById('new-category-form');
         const newCategoryNameInput = document.getElementById('new-category-name');
         const saveCategoryBtn = document.getElementById('save-category-btn');
         const cancelCategoryBtn = document.getElementById('cancel-category-btn');
         
-        // --- Date Helper ---
         function getTodayDateString() {
             const today = new Date();
             const year = today.getFullYear();
@@ -285,27 +283,8 @@
             return `${year}-${month}-${day}`;
         }
 
-        // --- Firebase & Data ---
-        async function initializeFirebase() {
-            // This check prevents the app from crashing if the Firebase config is not filled out.
-            if (firebaseConfig.apiKey.startsWith("PASTE_YOUR")) {
-                loaderSpinner.style.display = 'none';
-                loaderText.innerHTML = `
-                    <div class="text-center p-4 max-w-sm">
-                        <h2 class="text-xl font-bold text-red-500 mb-2">Configuration Needed</h2>
-                        <p class="text-gray-300">
-                            To use this app on GitHub, you must first create your own free Firebase project.
-                        </p>
-                        <p class="text-gray-400 text-sm mt-2">
-                            Open the <code>index.html</code> file, find the <code>firebaseConfig</code> object at the top of the script,
-                            and replace the placeholder values with your actual project credentials.
-                        </p>
-                    </div>
-                `;
-                return; // Stop the function from running further
-            }
-
-            try {
+        async function initializeAppWithConfig(firebaseConfig) {
+             try {
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -317,364 +296,28 @@
                         userDocRef = doc(db, docPath);
                         setupUserListener();
                     } else {
-                        await signInAnonymously(auth);
+                        try {
+                            await signInAnonymously(auth);
+                        } catch (error) {
+                             console.error("Anonymous sign-in failed:", error);
+                             loaderSpinner.style.display = 'none';
+                             loaderText.innerHTML = `<p class="text-red-500 text-center">Authentication Failed. Please check your Firebase project has Anonymous Sign-in enabled.</p>`;
+                        }
                     }
                 });
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
                 loaderSpinner.style.display = 'none';
-                loaderText.innerHTML = `<p class="text-red-500">Could not connect to database. Please check your Firebase credentials.</p>`;
+                loaderText.innerHTML = `<p class="text-red-500 text-center">Connection Failed. Please check your Firebase Config Key is correct.</p>`;
             }
         }
 
         function setupUserListener() {
+            loaderText.textContent = "Loading your vocabulary...";
             onSnapshot(userDocRef, (doc) => {
                 const today = getTodayDateString();
                 if (doc.exists()) {
                     const data = doc.data();
                     vocabulary = (data.vocabulary || []).map(word => ({ ...word, category: word.category || 'word' }));
-                    userCategories = [...new Set(['word', 'phrase', ...(data.categories || [])])];
-                    const dailyScores = data.dailyScores || {};
-                    dailyBestScore = dailyScores[today] || 0;
-                } else {
-                    vocabulary = [...defaultVocabulary];
-                    userCategories = ['word', 'phrase'];
-                    dailyBestScore = 0;
-                    saveUserData(); // Create the initial document
-                }
-                
-                populateCategoryDropdowns();
-                dailyScoreEl.textContent = dailyBestScore;
-                
-                if (isInitialLoad) {
-                    startGame();
-                    hideLoader();
-                    isInitialLoad = false;
-                }
-
-            }, (error) => {
-                console.error("Error listening to user data changes:", error);
-                loaderSpinner.style.display = 'none';
-                loaderText.innerHTML = `<p class="text-red-500">Error loading your data.</p>`;
-            });
-        }
-
-        async function saveUserData() {
-            if (!userDocRef) return;
-            try {
-                const today = getTodayDateString();
-                const payload = {
-                    vocabulary: vocabulary,
-                    categories: userCategories,
-                    dailyScores: { [today]: dailyBestScore }
-                };
-                await setDoc(userDocRef, payload, { merge: true });
-            } catch (error) { console.error("Error saving user data:", error); }
-        }
-        
-        async function updateVocabulary() {
-            if (!userDocRef) return;
-            try {
-                await updateDoc(userDocRef, { vocabulary: vocabulary });
-            } catch (error) { console.error("Error updating vocabulary:", error); }
-        }
-
-        async function updateCategories() {
-            if (!userDocRef) return;
-            try {
-                await updateDoc(userDocRef, { categories: userCategories });
-            } catch (error) { console.error("Error updating categories:", error); }
-        }
-        
-        async function updateDailyScore() {
-            if (!userDocRef) return;
-            try {
-                const today = getTodayDateString();
-                await updateDoc(userDocRef, { [`dailyScores.${today}`]: dailyBestScore });
-            } catch (error) { console.error("Error updating daily score:", error); }
-        }
-
-        // --- UI ---
-        function hideLoader() {
-            loaderOverlay.style.opacity = '0';
-            setTimeout(() => { loaderOverlay.classList.add('hidden'); }, 300);
-        }
-
-        function populateCategoryDropdowns() {
-            const currentAddCat = newWordCategory.value;
-            const currentFilterCat = categoryFilter.value;
-
-            // Populate Add Word dropdown
-            newWordCategory.innerHTML = '';
-            userCategories.forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat;
-                option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
-                newWordCategory.appendChild(option);
-            });
-            newWordCategory.value = currentAddCat && userCategories.includes(currentAddCat) ? currentAddCat : 'word';
-
-            // Populate Filter dropdown
-            categoryFilter.innerHTML = '<option value="all">All</option>';
-            userCategories.forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat;
-                option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
-                categoryFilter.appendChild(option);
-            });
-            categoryFilter.value = currentFilterCat && (userCategories.includes(currentFilterCat) || currentFilterCat === 'all') ? currentFilterCat : 'all';
-        }
-
-        // --- Translation ---
-        async function handleTranslate() {
-            const englishWord = newEnglishWordInput.value.trim();
-            if (!englishWord) { newFrenchWordInput.value = ''; return; }
-            translateIcon.classList.add('hidden');
-            spinnerIcon.classList.remove('hidden');
-            translateBtn.disabled = true;
-            newFrenchWordInput.value = 'Translating...';
-            const apiKey = "AIzaSyAfgJVfevvBpGaemGJf9ajRm59tP8kM1XM";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-            const prompt = `Translate "${englishWord}" into French. Only provide the translated word or phrase, with no additional explanation or context.`;
-            const payload = { contents: [{ parts: [{ text: prompt }] }] };
-            try {
-                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if (!response.ok) throw new Error(`API call failed: ${response.status}`);
-                const result = await response.json();
-                const candidate = result.candidates?.[0];
-                if (candidate?.content?.parts?.[0]?.text) {
-                    newFrenchWordInput.value = candidate.content.parts[0].text.trim().replace(/^["']|["']$/g, '');
-                } else { newFrenchWordInput.value = 'Could not translate.'; }
-            } catch (error) {
-                console.error('Translation error:', error);
-                newFrenchWordInput.value = 'Translation failed.';
-            } finally {
-                translateIcon.classList.remove('hidden');
-                spinnerIcon.classList.add('hidden');
-                translateBtn.disabled = false;
-            }
-        }
-
-        // --- Vocabulary Management ---
-        function renderWordList() {
-            wordList.innerHTML = '';
-            if (vocabulary.length === 0) {
-                wordList.innerHTML = `<li class="text-gray-400 text-center p-4">Your vocabulary is empty.</li>`;
-                return;
-            }
-            [...vocabulary].reverse().forEach((word) => {
-                const li = document.createElement('li');
-                const wordIndex = vocabulary.indexOf(word);
-                li.className = 'flex items-center justify-between p-3 bg-gray-700/50 rounded-lg';
-                const categoryDisplay = (word.category || 'word').charAt(0).toUpperCase() + (word.category || 'word').slice(1);
-                li.innerHTML = `
-                    <div class="flex-grow text-left">
-                        <p class="font-medium text-gray-200">${word.french}</p>
-                        <p class="text-sm text-gray-400">${word.english}</p>
-                    </div>
-                    <div class="flex items-center">
-                        <span class="text-xs bg-red-900/70 text-red-300 font-semibold rounded-full px-2.5 py-1 mr-4">${categoryDisplay}</span>
-                        <button data-index="${wordIndex}" class="delete-word-btn text-gray-500 hover:text-red-500 font-bold p-1 rounded-full hover:bg-red-900/50 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                        </button>
-                    </div>`;
-                wordList.appendChild(li);
-            });
-        }
-
-        async function addWord(e) {
-            e.preventDefault();
-            const french = newFrenchWordInput.value.trim();
-            const english = newEnglishWordInput.value.trim();
-            const category = newWordCategory.value;
-            if (french && english) {
-                vocabulary.push({ french, english, category });
-                renderWordList();
-                await updateVocabulary();
-                newFrenchWordInput.value = '';
-                newEnglishWordInput.value = '';
-                newEnglishWordInput.focus();
-            }
-        }
-
-        async function deleteWord(index) {
-            vocabulary.splice(index, 1);
-            renderWordList();
-            await updateVocabulary();
-        }
-
-        // --- Game Logic ---
-        function shuffle(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
-        }
-
-        function startGame() {
-            currentWordIndex = 0; score = 0;
-            const selectedCategory = categoryFilter.value;
-            let filteredVocab = (selectedCategory === 'all') ? vocabulary : vocabulary.filter(w => w.category === selectedCategory);
-            shuffledVocabulary = shuffle([...filteredVocab]);
-            scoreEl.textContent = score;
-            dailyScoreEl.textContent = dailyBestScore;
-            inputSection.classList.remove('hidden');
-            nextSection.classList.add('hidden');
-            restartSection.classList.add('hidden');
-            feedbackEl.textContent = '';
-            flashcard.classList.remove('is-flipped');
-            loadNextWord();
-        }
-
-        function loadNextWord() {
-             if (shuffledVocabulary.length === 0) {
-                promptWordEl.textContent = 'No Words'; answerWordEl.textContent = 'No Words';
-                const selectedCategory = categoryFilter.value;
-                if(selectedCategory !== 'all' && vocabulary.length > 0) {
-                    feedbackEl.innerHTML = `<i>No items in "${selectedCategory}" category.</i>`;
-                } else {
-                    feedbackEl.innerHTML = `<i>Add words in "Manage" to play!</i>`;
-                }
-                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium flex-shrink-0 flex items-center justify-center text-gray-400';
-                inputSection.classList.add('hidden');
-                cardCounterEl.textContent = `0 / 0`;
-                return;
-            }
-            if (currentWordIndex < shuffledVocabulary.length) {
-                const wordPair = shuffledVocabulary[currentWordIndex];
-                flashcard.classList.remove('is-flipped');
-                setTimeout(() => {
-                    if (gameMode === 'frenchToEnglish') {
-                        promptWordEl.textContent = wordPair.french;
-                        answerWordEl.textContent = wordPair.english;
-                        answerInput.placeholder = "Type the English translation...";
-                    } else {
-                        promptWordEl.textContent = wordPair.english;
-                        answerWordEl.textContent = wordPair.french;
-                        answerInput.placeholder = "Type the French translation...";
-                    }
-                }, 300);
-                cardCounterEl.textContent = `${currentWordIndex + 1} / ${shuffledVocabulary.length}`;
-                answerInput.value = ''; feedbackEl.textContent = '';
-                inputSection.classList.remove('hidden'); nextSection.classList.add('hidden');
-                answerInput.disabled = false;
-                setTimeout(() => answerInput.focus(), 0);
-            } else { endGame(); }
-        }
-
-        function checkAnswer() {
-            if (shuffledVocabulary.length === 0) return;
-            const userAnswer = answerInput.value.trim().toLowerCase();
-            const currentWord = shuffledVocabulary[currentWordIndex];
-            const correctAnswer = (gameMode === 'frenchToEnglish' ? currentWord.english : currentWord.french).toLowerCase();
-            const feedbackAnswer = gameMode === 'frenchToEnglish' ? currentWord.english : currentWord.french;
-            answerInput.disabled = true;
-            if (userAnswer === correctAnswer) {
-                score++;
-                scoreEl.textContent = score;
-                feedbackEl.innerHTML = '<i>Correct!</i>';
-                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-amber-400 flex-shrink-0 flex items-center justify-center';
-                flashcard.classList.add('is-flipped');
-            } else {
-                feedbackEl.innerHTML = `<i>Not quite. The answer is: <span class="font-bold">${feedbackAnswer}</span></i>`;
-                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-red-500 flex-shrink-0 flex items-center justify-center';
-            }
-            inputSection.classList.add('hidden');
-            nextSection.classList.remove('hidden');
-        }
-
-        async function endGame() {
-            if (score > dailyBestScore) {
-                dailyBestScore = score;
-                dailyScoreEl.textContent = dailyBestScore;
-                await updateDailyScore();
-            }
-            promptWordEl.textContent = 'Félicitations!';
-            feedbackEl.innerHTML = `<i>You finished! Final score: ${score} / ${shuffledVocabulary.length}</i>`;
-            feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-gray-300 flex-shrink-0 flex items-center justify-center';
-            inputSection.classList.add('hidden');
-            nextSection.classList.add('hidden');
-            restartSection.classList.remove('hidden');
-        }
-        
-        // --- Event Listeners ---
-        switchModeBtn.addEventListener('click', () => {
-            gameMode = gameMode === 'frenchToEnglish' ? 'englishToFrench' : 'frenchToEnglish';
-            switchModeBtn.innerHTML = gameMode === 'frenchToEnglish' ? 'Fr &rarr; En' : 'En &rarr; Fr';
-            startGame();
-        });
-        categoryFilter.addEventListener('change', startGame);
-        manageWordsBtn.addEventListener('click', () => {
-            gameView.classList.add('hidden');
-            manageView.classList.remove('hidden');
-            renderWordList();
-        });
-        backToGameBtn.addEventListener('click', () => {
-            gameView.classList.remove('hidden');
-            manageView.classList.add('hidden');
-            startGame();
-        });
-        addWordForm.addEventListener('submit', addWord);
-        wordList.addEventListener('click', (e) => {
-            const deleteButton = e.target.closest('.delete-word-btn');
-            if (deleteButton) {
-                const index = deleteButton.getAttribute('data-index');
-                deleteWord(index);
-            }
-        });
-        submitBtn.addEventListener('click', checkAnswer);
-        answerInput.addEventListener('keypress', (e) => e.key === 'Enter' && !submitBtn.disabled && checkAnswer());
-        nextBtn.addEventListener('click', () => { currentWordIndex++; loadNextWord(); });
-        restartBtn.addEventListener('click', startGame);
-        translateBtn.addEventListener('click', handleTranslate);
-        newEnglishWordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleTranslate(); } });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                if (!nextSection.classList.contains('hidden')) { e.preventDefault(); nextBtn.click(); }
-                else if (!restartSection.classList.contains('hidden')) { e.preventDefault(); restartBtn.click(); }
-            }
-        });
-
-        answerInput.addEventListener('focus', () => {
-            // This is the key fix for mobile keyboard issues.
-            // When the user taps the input, wait for the keyboard to animate in,
-            // then scroll the flashcard into view.
-            setTimeout(() => {
-                flashcardContainer.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
-                });
-            }, 300); // 300ms delay to allow keyboard to appear
-        });
-
-        // Custom Category Listeners
-        addCategoryBtn.addEventListener('click', () => {
-            newCategoryForm.classList.remove('hidden');
-            addCategoryBtn.classList.add('hidden');
-            newCategoryNameInput.focus();
-        });
-        cancelCategoryBtn.addEventListener('click', () => {
-            newCategoryForm.classList.add('hidden');
-            addCategoryBtn.classList.remove('hidden');
-        });
-        saveCategoryBtn.addEventListener('click', async () => {
-            const newCat = newCategoryNameInput.value.trim().toLowerCase();
-            if (newCat && !userCategories.includes(newCat)) {
-                userCategories.push(newCat);
-                await updateCategories();
-                populateCategoryDropdowns();
-                newWordCategory.value = newCat;
-            }
-            newCategoryNameInput.value = '';
-            newCategoryForm.classList.add('hidden');
-            addCategoryBtn.classList.remove('hidden');
-        });
-
-        // --- Initial Load ---
-        initializeFirebase();
-
-    </script>
-</body>
-</html>
+                    user
 
