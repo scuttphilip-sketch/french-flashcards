@@ -314,10 +314,385 @@
 
         function setupUserListener() {
             loaderText.textContent = "Loading your vocabulary...";
-            onSnapshot(userDocRef, (doc) => {
+            const unsubscribe = onSnapshot(userDocRef, (doc) => {
                 const today = getTodayDateString();
                 if (doc.exists()) {
                     const data = doc.data();
                     vocabulary = (data.vocabulary || []).map(word => ({ ...word, category: word.category || 'word' }));
-                    user
+                    userCategories = [...new Set(['word', 'phrase', ...(data.categories || [])])];
+                    const dailyScores = data.dailyScores || {};
+                    dailyBestScore = dailyScores[today] || 0;
+                } else {
+                    vocabulary = [...defaultVocabulary];
+                    userCategories = ['word', 'phrase'];
+                    dailyBestScore = 0;
+                    saveUserData(); // Create the initial document
+                }
+                
+                populateCategoryDropdowns();
+                dailyScoreEl.textContent = dailyBestScore;
+                
+                if (isInitialLoad) {
+                    startGame();
+                    hideLoader();
+                    isInitialLoad = false;
+                    unsubscribe(); // Stop listening after the first successful data load
+                }
+
+            }, (error) => {
+                console.error("Error listening to user data changes:", error);
+                loaderSpinner.style.display = 'none';
+                loaderText.innerHTML = `<p class="text-red-500">Error loading your data.</p>`;
+                unsubscribe();
+            });
+        }
+
+        async function saveUserData() {
+            if (!userDocRef) return;
+            try {
+                const today = getTodayDateString();
+                await setDoc(userDocRef, { vocabulary, categories: userCategories, dailyScores: { [today]: dailyBestScore } }, { merge: true });
+            } catch (error) { console.error("Error saving user data:", error); }
+        }
+        
+        async function updateVocabulary() {
+            if (!userDocRef) return;
+            try { await updateDoc(userDocRef, { vocabulary }); } 
+            catch (error) { console.error("Error updating vocabulary:", error); }
+        }
+
+        async function updateCategories() {
+            if (!userDocRef) return;
+            try { await updateDoc(userDocRef, { categories: userCategories }); }
+            catch (error) { console.error("Error updating categories:", error); }
+        }
+        
+        async function updateDailyScore() {
+            if (!userDocRef) return;
+            try {
+                const today = getTodayDateString();
+                await updateDoc(userDocRef, { [`dailyScores.${today}`]: dailyBestScore });
+            } catch (error) { console.error("Error updating daily score:", error); }
+        }
+
+        function hideLoader() {
+            loaderOverlay.style.opacity = '0';
+            setTimeout(() => { loaderOverlay.classList.add('hidden'); }, 300);
+        }
+
+        function populateCategoryDropdowns() {
+            const currentAddCat = newWordCategory.value;
+            const currentFilterCat = categoryFilter.value;
+            newWordCategory.innerHTML = '';
+            userCategories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+                newWordCategory.appendChild(option);
+            });
+            newWordCategory.value = currentAddCat && userCategories.includes(currentAddCat) ? currentAddCat : 'word';
+            categoryFilter.innerHTML = '<option value="all">All</option>';
+            userCategories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+                categoryFilter.appendChild(option);
+            });
+            categoryFilter.value = currentFilterCat && (userCategories.includes(currentFilterCat) || currentFilterCat === 'all') ? currentFilterCat : 'all';
+        }
+
+        async function handleTranslate() {
+            const englishWord = newEnglishWordInput.value.trim();
+            const geminiApiKey = localStorage.getItem('geminiApiKey_french_flashcards');
+            if (!englishWord || !geminiApiKey) { newFrenchWordInput.value = ''; return; }
+            translateIcon.classList.add('hidden');
+            spinnerIcon.classList.remove('hidden');
+            translateBtn.disabled = true;
+            newFrenchWordInput.value = 'Translating...';
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiApiKey}`;
+            const prompt = `Translate "${englishWord}" into French. Only provide the translated word or phrase, with no additional explanation or context.`;
+            const payload = { contents: [{ parts: [{ text: prompt }] }] };
+            try {
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+                if (candidate?.content?.parts?.[0]?.text) {
+                    newFrenchWordInput.value = candidate.content.parts[0].text.trim().replace(/^["']|["']$/g, '');
+                } else { newFrenchWordInput.value = 'Could not translate.'; }
+            } catch (error) {
+                console.error('Translation error:', error);
+                newFrenchWordInput.value = 'Translation failed.';
+            } finally {
+                translateIcon.classList.remove('hidden');
+                spinnerIcon.classList.add('hidden');
+                translateBtn.disabled = false;
+            }
+        }
+
+        function renderWordList() {
+            wordList.innerHTML = '';
+            if (vocabulary.length === 0) {
+                wordList.innerHTML = `<li class="text-gray-400 text-center p-4">Your vocabulary is empty.</li>`;
+                return;
+            }
+            [...vocabulary].reverse().forEach((word) => {
+                const li = document.createElement('li');
+                const wordIndex = vocabulary.indexOf(word);
+                li.className = 'flex items-center justify-between p-3 bg-gray-700/50 rounded-lg';
+                const categoryDisplay = (word.category || 'word').charAt(0).toUpperCase() + (word.category || 'word').slice(1);
+                li.innerHTML = `
+                    <div class="flex-grow text-left">
+                        <p class="font-medium text-gray-200">${word.french}</p>
+                        <p class="text-sm text-gray-400">${word.english}</p>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="text-xs bg-red-900/70 text-red-300 font-semibold rounded-full px-2.5 py-1 mr-4">${categoryDisplay}</span>
+                        <button data-index="${wordIndex}" class="delete-word-btn text-gray-500 hover:text-red-500 font-bold p-1 rounded-full hover:bg-red-900/50 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>`;
+                wordList.appendChild(li);
+            });
+        }
+
+        async function addWord(e) {
+            e.preventDefault();
+            const french = newFrenchWordInput.value.trim();
+            const english = newEnglishWordInput.value.trim();
+            const category = newWordCategory.value;
+            if (french && english) {
+                vocabulary.push({ french, english, category });
+                renderWordList();
+                await updateVocabulary();
+                newFrenchWordInput.value = '';
+                newEnglishWordInput.value = '';
+                newEnglishWordInput.focus();
+            }
+        }
+
+        async function deleteWord(index) {
+            vocabulary.splice(index, 1);
+            renderWordList();
+            await updateVocabulary();
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function startGame() {
+            currentWordIndex = 0; score = 0;
+            const selectedCategory = categoryFilter.value;
+            let filteredVocab = (selectedCategory === 'all') ? vocabulary : vocabulary.filter(w => w.category === selectedCategory);
+            shuffledVocabulary = shuffle([...filteredVocab]);
+            scoreEl.textContent = score;
+            dailyScoreEl.textContent = dailyBestScore;
+            inputSection.classList.remove('hidden');
+            nextSection.classList.add('hidden');
+            restartSection.classList.add('hidden');
+            feedbackEl.textContent = '';
+            flashcard.classList.remove('is-flipped');
+            loadNextWord();
+        }
+
+        function loadNextWord() {
+             if (shuffledVocabulary.length === 0) {
+                promptWordEl.textContent = 'No Words'; answerWordEl.textContent = 'No Words';
+                const selectedCategory = categoryFilter.value;
+                if(selectedCategory !== 'all' && vocabulary.length > 0) {
+                    feedbackEl.innerHTML = `<i>No items in "${selectedCategory}" category.</i>`;
+                } else {
+                    feedbackEl.innerHTML = `<i>Add words in "Manage" to play!</i>`;
+                }
+                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium flex-shrink-0 flex items-center justify-center text-gray-400';
+                inputSection.classList.add('hidden');
+                cardCounterEl.textContent = `0 / 0`;
+                return;
+            }
+            if (currentWordIndex < shuffledVocabulary.length) {
+                const wordPair = shuffledVocabulary[currentWordIndex];
+                flashcard.classList.remove('is-flipped');
+                setTimeout(() => {
+                    if (gameMode === 'frenchToEnglish') {
+                        promptWordEl.textContent = wordPair.french;
+                        answerWordEl.textContent = wordPair.english;
+                        answerInput.placeholder = "Type the English translation...";
+                    } else {
+                        promptWordEl.textContent = wordPair.english;
+                        answerWordEl.textContent = wordPair.french;
+                        answerInput.placeholder = "Type the French translation...";
+                    }
+                }, 300);
+                cardCounterEl.textContent = `${currentWordIndex + 1} / ${shuffledVocabulary.length}`;
+                answerInput.value = ''; feedbackEl.textContent = '';
+                inputSection.classList.remove('hidden'); nextSection.classList.add('hidden');
+                answerInput.disabled = false;
+                setTimeout(() => answerInput.focus(), 0);
+            } else { endGame(); }
+        }
+
+        function checkAnswer() {
+            if (shuffledVocabulary.length === 0) return;
+            const userAnswer = answerInput.value.trim().toLowerCase();
+            const currentWord = shuffledVocabulary[currentWordIndex];
+            const correctAnswer = (gameMode === 'frenchToEnglish' ? currentWord.english : currentWord.french).toLowerCase();
+            const feedbackAnswer = gameMode === 'frenchToEnglish' ? currentWord.english : currentWord.french;
+            answerInput.disabled = true;
+            if (userAnswer === correctAnswer) {
+                score++;
+                scoreEl.textContent = score;
+                feedbackEl.innerHTML = '<i>Correct!</i>';
+                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-amber-400 flex-shrink-0 flex items-center justify-center';
+                flashcard.classList.add('is-flipped');
+            } else {
+                feedbackEl.innerHTML = `<i>Not quite. The answer is: <span class="font-bold">${feedbackAnswer}</span></i>`;
+                feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-red-500 flex-shrink-0 flex items-center justify-center';
+            }
+            inputSection.classList.add('hidden');
+            nextSection.classList.remove('hidden');
+        }
+
+        async function endGame() {
+            if (score > dailyBestScore) {
+                dailyBestScore = score;
+                dailyScoreEl.textContent = dailyBestScore;
+                await updateDailyScore();
+            }
+            promptWordEl.textContent = 'Félicitations!';
+            feedbackEl.innerHTML = `<i>You finished! Final score: ${score} / ${shuffledVocabulary.length}</i>`;
+            feedbackEl.className = 'mt-4 h-20 text-base sm:text-lg font-medium text-gray-300 flex-shrink-0 flex items-center justify-center';
+            inputSection.classList.add('hidden');
+            nextSection.classList.add('hidden');
+            restartSection.classList.remove('hidden');
+        }
+        
+        // --- Event Listeners ---
+        switchModeBtn.addEventListener('click', () => {
+            gameMode = gameMode === 'frenchToEnglish' ? 'englishToFrench' : 'frenchToEnglish';
+            switchModeBtn.innerHTML = gameMode === 'frenchToEnglish' ? 'Fr &rarr; En' : 'En &rarr; Fr';
+            startGame();
+        });
+        categoryFilter.addEventListener('change', startGame);
+        manageWordsBtn.addEventListener('click', () => {
+            gameView.classList.add('hidden');
+            manageView.classList.remove('hidden');
+            renderWordList();
+        });
+        backToGameBtn.addEventListener('click', () => {
+            gameView.classList.remove('hidden');
+            manageView.classList.add('hidden');
+            startGame();
+        });
+        addWordForm.addEventListener('submit', addWord);
+        wordList.addEventListener('click', (e) => {
+            const deleteButton = e.target.closest('.delete-word-btn');
+            if (deleteButton) {
+                const index = deleteButton.getAttribute('data-index');
+                deleteWord(index);
+            }
+        });
+        submitBtn.addEventListener('click', checkAnswer);
+        answerInput.addEventListener('keypress', (e) => e.key === 'Enter' && !submitBtn.disabled && checkAnswer());
+        nextBtn.addEventListener('click', () => { currentWordIndex++; loadNextWord(); });
+        restartBtn.addEventListener('click', startGame);
+        translateBtn.addEventListener('click', handleTranslate);
+        newEnglishWordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleTranslate(); } });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                if (!nextSection.classList.contains('hidden')) { e.preventDefault(); nextBtn.click(); }
+                else if (!restartSection.classList.contains('hidden')) { e.preventDefault(); restartBtn.click(); }
+            }
+        });
+
+        answerInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                flashcardContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+        });
+
+        addCategoryBtn.addEventListener('click', () => {
+            newCategoryForm.classList.remove('hidden');
+            addCategoryBtn.classList.add('hidden');
+            newCategoryNameInput.focus();
+        });
+        cancelCategoryBtn.addEventListener('click', () => {
+            newCategoryForm.classList.add('hidden');
+            addCategoryBtn.classList.remove('hidden');
+        });
+        saveCategoryBtn.addEventListener('click', async () => {
+            const newCat = newCategoryNameInput.value.trim().toLowerCase();
+            if (newCat && !userCategories.includes(newCat)) {
+                userCategories.push(newCat);
+                await updateCategories();
+                populateCategoryDropdowns();
+                newWordCategory.value = newCat;
+            }
+            newCategoryNameInput.value = '';
+            newCategoryForm.classList.add('hidden');
+            addCategoryBtn.classList.remove('hidden');
+        });
+
+        // --- Initial Load & Config Management ---
+        function loadAndInitialize() {
+            const storedFirebaseConfig = localStorage.getItem('firebaseConfig_french_flashcards');
+            const storedGeminiApiKey = localStorage.getItem('geminiApiKey_french_flashcards');
+
+            if (storedFirebaseConfig && storedGeminiApiKey) {
+                try {
+                    const firebaseConfig = JSON.parse(storedFirebaseConfig);
+                    initializeAppWithConfig(firebaseConfig);
+                } catch (e) {
+                    console.error("Failed to parse stored Firebase config", e);
+                    configOverlay.classList.remove('hidden');
+                    loaderOverlay.classList.add('hidden');
+                }
+            } else {
+                configOverlay.classList.remove('hidden');
+                loaderOverlay.classList.add('hidden');
+            }
+        }
+
+        saveConfigBtn.addEventListener('click', () => {
+            const firebaseConfigStr = firebaseConfigInput.value.trim();
+            const geminiApiKey = geminiApiKeyInput.value.trim();
+            configError.textContent = '';
+
+            if (!firebaseConfigStr || !geminiApiKey) {
+                configError.textContent = 'Please fill in both fields.';
+                return;
+            }
+
+            try {
+                // Sanitize the input to get just the JSON object
+                const jsonStr = firebaseConfigStr.substring(firebaseConfigStr.indexOf('{'), firebaseConfigStr.lastIndexOf('}') + 1);
+                const firebaseConfig = JSON.parse(jsonStr);
+
+                if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                    throw new Error("Invalid Firebase Config object.");
+                }
+
+                localStorage.setItem('firebaseConfig_french_flashcards', JSON.stringify(firebaseConfig));
+                localStorage.setItem('geminiApiKey_french_flashcards', geminiApiKey);
+                
+                configOverlay.classList.add('hidden');
+                loaderOverlay.classList.remove('hidden');
+                loaderText.textContent = "Connecting to database...";
+                initializeAppWithConfig(firebaseConfig);
+
+            } catch (e) {
+                console.error("Error parsing Firebase config:", e);
+                configError.textContent = 'The Firebase Config Key is not valid. Please paste the entire code block.';
+            }
+        });
+        
+        loadAndInitialize();
+
+    </script>
+</body>
+</html>
 
