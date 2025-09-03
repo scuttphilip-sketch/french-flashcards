@@ -432,7 +432,7 @@
             spinnerIcon.classList.remove('hidden');
             translateBtn.disabled = true;
             newFrenchWordInput.value = 'Translating...';
-            const apiKey = "";
+            const apiKey = "projects/360159415670,french-flashcard-acb68,French Flashcard,,1,,1,,1756762989,158235000,1,2,3,4,6,7,5";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const prompt = `Translate "${englishWord}" into French. Only provide the translated word or phrase, with no additional explanation or context.`;
             const payload = { contents: [{ parts: [{ text: prompt }] }] };
