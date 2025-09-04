@@ -668,8 +668,12 @@
             }
 
             try {
-                // Sanitize the input to get just the JSON object
-                const jsonStr = firebaseConfigStr.substring(firebaseConfigStr.indexOf('{'), firebaseConfigStr.lastIndexOf('}') + 1);
+                // Use a regular expression to robustly extract the JSON object
+                const match = firebaseConfigStr.match(/\{[\s\S]*\}/);
+                if (!match || !match[0]) {
+                    throw new Error("Could not find a valid JSON object starting with { and ending with }.");
+                }
+                const jsonStr = match[0];
                 const firebaseConfig = JSON.parse(jsonStr);
 
                 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
