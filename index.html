@@ -224,13 +224,6 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // --- DOM Elements ---
-        const configOverlay = document.getElementById('config-overlay');
-        const firebaseConfigInput = document.getElementById('firebase-config-input');
-        const geminiApiKeyInput = document.getElementById('gemini-api-key-input');
-        const saveConfigBtn = document.getElementById('save-config-btn');
-        const configError = document.getElementById('config-error');
-
         const defaultVocabulary = [ { french: 'Bonjour', english: 'Hello', category: 'word' } ];
         
         let vocabulary = [], userCategories = ['word', 'phrase'], currentWordIndex = 0, score = 0, dailyBestScore = 0, shuffledVocabulary = [], gameMode = 'frenchToEnglish', isInitialLoad = true;
@@ -639,6 +632,49 @@
 
         // --- Initial Load & Config Management ---
         function loadAndInitialize() {
+            const configOverlay = document.getElementById('config-overlay');
+            const saveConfigBtn = document.getElementById('save-config-btn');
+            const loaderOverlay = document.getElementById('loader-overlay');
+
+            saveConfigBtn.addEventListener('click', () => {
+                const firebaseConfigInput = document.getElementById('firebase-config-input');
+                const geminiApiKeyInput = document.getElementById('gemini-api-key-input');
+                const configError = document.getElementById('config-error');
+
+                const firebaseConfigStr = firebaseConfigInput.value.trim();
+                const geminiApiKey = geminiApiKeyInput.value.trim();
+                configError.textContent = '';
+
+                if (!firebaseConfigStr || !geminiApiKey) {
+                    configError.textContent = 'Please fill in both fields.';
+                    return;
+                }
+
+                try {
+                    const match = firebaseConfigStr.match(/\{[\s\S]*\}/);
+                    if (!match || !match[0]) {
+                        throw new Error("Could not find a valid JSON object starting with { and ending with }.");
+                    }
+                    const jsonStr = match[0];
+                    const firebaseConfig = JSON.parse(jsonStr);
+
+                    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                        throw new Error("Invalid Firebase Config object.");
+                    }
+
+                    localStorage.setItem('firebaseConfig_french_flashcards', JSON.stringify(firebaseConfig));
+                    localStorage.setItem('geminiApiKey_french_flashcards', geminiApiKey);
+                    
+                    configOverlay.classList.add('hidden');
+                    loaderOverlay.classList.remove('hidden');
+                    initializeAppWithConfig(firebaseConfig);
+
+                } catch (e) {
+                    console.error("Error parsing Firebase config:", e);
+                    configError.textContent = 'The Firebase Config Key is not valid. Please paste the entire code block.';
+                }
+            });
+
             const storedFirebaseConfig = localStorage.getItem('firebaseConfig_french_flashcards');
             const storedGeminiApiKey = localStorage.getItem('geminiApiKey_french_flashcards');
 
@@ -656,49 +692,10 @@
                 loaderOverlay.classList.add('hidden');
             }
         }
-
-        saveConfigBtn.addEventListener('click', () => {
-            const firebaseConfigStr = firebaseConfigInput.value.trim();
-            const geminiApiKey = geminiApiKeyInput.value.trim();
-            configError.textContent = '';
-
-            if (!firebaseConfigStr || !geminiApiKey) {
-                configError.textContent = 'Please fill in both fields.';
-                return;
-            }
-
-            try {
-                // Use a regular expression to robustly extract the JSON object
-                const match = firebaseConfigStr.match(/\{[\s\S]*\}/);
-                if (!match || !match[0]) {
-                    throw new Error("Could not find a valid JSON object starting with { and ending with }.");
-                }
-                const jsonStr = match[0];
-                const firebaseConfig = JSON.parse(jsonStr);
-
-                if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-                    throw new Error("Invalid Firebase Config object.");
-                }
-
-                localStorage.setItem('firebaseConfig_french_flashcards', JSON.stringify(firebaseConfig));
-                localStorage.setItem('geminiApiKey_french_flashcards', geminiApiKey);
-                
-                configOverlay.classList.add('hidden');
-                loaderOverlay.classList.remove('hidden');
-                loaderText.textContent = "Connecting to database...";
-                initializeAppWithConfig(firebaseConfig);
-
-            } catch (e) {
-                console.error("Error parsing Firebase config:", e);
-                configError.textContent = 'The Firebase Config Key is not valid. Please paste the entire code block.';
-            }
-        });
         
         loadAndInitialize();
 
     </script>
 </body>
 </html>
-"
-The following is my user query: I get the message "Please fill in both fields" but both fields are filled in
 
