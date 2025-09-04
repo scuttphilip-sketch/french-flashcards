@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>French Flashcard Game</title>
+    <title>Carte-eclair Française</title>
     
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#450a0a">
-    <link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;French Flashcards&quot;,&quot;short_name&quot;:&quot;Flashcards&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#111827&quot;,&quot;theme_color&quot;:&quot;#991b1b&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23991b1b'/%3E%3Ctext x='50' y='55' font-size='50' fill='white' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;},{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23991b1b'/%3E%3Ctext x='50' y='55' font-size='50' fill='white' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+    <link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Carte-eclair Française&quot;,&quot;short_name&quot;:&quot;Flashcards&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;#111827&quot;,&quot;theme_color&quot;:&quot;#991b1b&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23991b1b'/%3E%3Ctext x='50' y='55' font-size='50' fill='white' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;},{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23991b1b'/%3E%3Ctext x='50' y='55' font-size='50' fill='white' text-anchor='middle' dominant-baseline='middle' font-family='sans-serif' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -109,7 +109,7 @@
         <div id="game-view" class="flex-1 flex flex-col text-center p-4 sm:p-6">
             <!-- Header section -->
             <div class="flex-shrink-0">
-                <h1 class="font-serif text-4xl font-bold text-blue-400 mb-2">Carte-éclair</h1>
+                <h1 class="font-serif text-4xl font-bold text-blue-400 mb-2">Carte-éclair Française</h1>
                 <p class="text-white mb-4 italic">French Flashcards</p>
                 <div class="flex justify-around items-center mb-4 text-center">
                     <div>
@@ -651,15 +651,12 @@
                 }
 
                 try {
-                    const match = firebaseConfigStr.match(/\{[\s\S]*\}/);
-                    if (!match || !match[0]) {
-                        throw new Error("Could not find a valid JSON object starting with { and ending with }.");
-                    }
-                    const jsonStr = match[0];
-                    const firebaseConfig = JSON.parse(jsonStr);
+                    // This is the new, robust method. It executes the pasted string as code.
+                    const getConfigObject = new Function(`${firebaseConfigStr}; return firebaseConfig;`);
+                    const firebaseConfig = getConfigObject();
 
-                    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-                        throw new Error("Invalid Firebase Config object.");
+                    if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                        throw new Error("Invalid Firebase Config object. The properties apiKey and projectId are missing.");
                     }
 
                     localStorage.setItem('firebaseConfig_french_flashcards', JSON.stringify(firebaseConfig));
@@ -670,8 +667,8 @@
                     initializeAppWithConfig(firebaseConfig);
 
                 } catch (e) {
-                    console.error("Error parsing Firebase config:", e);
-                    configError.textContent = 'The Firebase Config Key is not valid. Please paste the entire code block.';
+                    console.error("Error evaluating Firebase config:", e);
+                    configError.textContent = 'The Firebase Config Key is not valid. Please check it and try again.';
                 }
             });
 
@@ -698,5 +695,4 @@
     </script>
 </body>
 </html>
-" and have made the following request: "Can you change the name "French Flashcard Game" to "Carte-eclair Française"
 
